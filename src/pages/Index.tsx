@@ -6,8 +6,8 @@ import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import heroPoster from '@/assets/banner.png';
 import cast1 from '@/assets/image1.png';
-import cast2 from '@/assets/image3.png';
-import cast3 from '@/assets/image2.png';
+import cast2 from '@/assets/image2.png';
+import cast3 from '@/assets/image3.png';
 import cast4 from '@/assets/image4.png';
 import cast5 from '@/assets/image5.png';
 import cast6 from '@/assets/image6.png';
@@ -24,17 +24,17 @@ import { useEffect, useState } from 'react';
 
 const castMembers = [
   { img: cast1, nameKn: 'ಅರ್ಜುನ್ ದೇವ್', nameEn: 'SHIVARAM GANGATGAR', roleKn: 'ದೇವರಾಜ', roleEn: 'As a Mahaguru' },
-  { img: cast2, nameKn: 'ಪ್ರಿಯಾ ಶರ್ಮಾ', nameEn: 'Karthik', roleKn: 'ದೇವಿ ಅನನ್ಯಾ', roleEn: 'As a Chintan' },
-  { img: cast3, nameKn: 'ಅರ್ಚನಾ ಗೌಡ', nameEn: 'Archana Gowda', roleKn: 'ಗುರು ವಿಶ್ವಾಮಿತ್ರ', roleEn: 'As a Mandara' },
-  { img: cast4, nameKn: 'ರಾಮಚಂದ್ರ', nameEn: 'Chiranth', roleKn: 'ಗುರು ವಿಶ್ವಾಮಿತ್ರ', roleEn: 'Tejaswi' },
-  { img: cast5, nameKn: 'ರಾಮಚಂದ್ರ', nameEn: 'Chiranth', roleKn: 'ಗುರು ವಿಶ್ವಾಮಿತ್ರ', roleEn: 'Tejaswi' },
-  { img: cast6, nameKn: 'ರಾಮಚಂದ್ರ', nameEn: 'Chiranth', roleKn: 'ಗುರು ವಿಶ್ವಾಮಿತ್ರ', roleEn: 'Tejaswi' },
-  { img: cast7, nameKn: 'ರಾಮಚಂದ್ರ', nameEn: 'Chiranth', roleKn: 'ಗುರು ವಿಶ್ವಾಮಿತ್ರ', roleEn: 'Tejaswi' },
-  { img: cast8, nameKn: 'ರಾಮಚಂದ್ರ', nameEn: 'Chiranth', roleKn: 'ಗುರು ವಿಶ್ವಾಮಿತ್ರ', roleEn: 'Tejaswi' },
-  { img: cast9, nameKn: 'ರಾಮಚಂದ್ರ', nameEn: 'Chiranth', roleKn: 'ಗುರು ವಿಶ್ವಾಮಿತ್ರ', roleEn: 'Tejaswi' },
-  { img: cast10, nameKn: 'ರಾಮಚಂದ್ರ', nameEn: 'Chiranth', roleKn: 'ಗುರು ವಿಶ್ವಾಮಿತ್ರ', roleEn: 'Tejaswi' },
-  { img: cast11, nameKn: 'ರಾಮಚಂದ್ರ', nameEn: 'Chiranth', roleKn: 'ಗುರು ವಿಶ್ವಾಮಿತ್ರ', roleEn: 'Tejaswi' },
-  { img: cast12, nameKn: 'ರಾಮಚಂದ್ರ', nameEn: 'Chiranth', roleKn: 'ಗುರು ವಿಶ್ವಾಮಿತ್ರ', roleEn: 'Tejaswi' },
+  { img: cast2, nameKn: 'ಚಿರಂತ್', nameEn: 'Chiranth', roleKn: 'ದೇವಿ ಅನನ್ಯಾ', roleEn: 'As a Tejaswi' },
+  { img: cast3, nameKn: 'ಕಾರ್ತಿಕ್', nameEn: 'Karthik', roleKn: 'ಚಿಂತನ್', roleEn: 'As a Chintan' },
+  { img: cast4, nameKn: 'ಅರ್ಚನಾ ಗೌಡ', nameEn: 'Archana Gowda', roleKn: 'ಮಂದಾರ', roleEn: 'As a Mandara' },
+  { img: cast5, nameKn: 'ಸಾಗರ್', nameEn: 'Sagar', roleKn: 'ಭುವನ್', roleEn: 'As a Bhuvan' },
+  { img: cast6, nameKn: 'ಕೆ. ವಾಸುದೇವ್', nameEn: 'K. Vasudev', roleKn: 'ರಾಮತೀರ್ಥ', roleEn: 'As a Ramathirtha' },
+  { img: cast7, nameKn: 'ಅರವಿಂದ್', nameEn: 'Arvind', roleKn: 'ಖಾಲಿದ್', roleEn: 'As a Khalid' },
+  { img: cast8, nameKn: 'ರಾಜು', nameEn: 'Raju', roleKn: 'ನಾಯಕಿಯ ತಂದೆ', roleEn: 'As Heroines Father' },
+  { img: cast9, nameKn: 'ವಿ. ಮನೋಹರ್', nameEn: 'V. Manohar', roleKn: 'ಸಂಗೀತ ನಿರ್ದೇಶಕರು', roleEn: 'Music Director' },
+  { img: cast10, nameKn: 'ಅನುರಾಧ ಭಟ್', nameEn: 'Anuradha Bhat', roleKn: 'ಗಾಯಕಿ', roleEn: 'Singer' },
+  { img: cast11, nameKn: 'ಚೇತನ ನಾಯಕ್', nameEn: 'Chetan Naik', roleKn: 'ಗಾಯಕ', roleEn: 'Singer' },
+  { img: cast12, nameKn: 'ಎ.ಟಿ. ರವೀಶ್', nameEn: 'A.T. Ravish', roleKn: 'ಮಿಕ್ಸಿಂಗ್', roleEn: 'Mixing' },
 ];
 
 const trailerUrl = "https://www.youtube.com/embed/mjGFKYiVh7g";
