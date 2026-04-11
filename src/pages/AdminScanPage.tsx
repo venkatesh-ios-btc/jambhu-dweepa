@@ -2,11 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Html5QrcodeScanner } from 'html5-qrcode';
-import { ScanLine, ArrowLeft, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
+import { Html5Qrcode } from 'html5-qrcode';
+import { ScanLine, ArrowLeft, CheckCircle, XCircle, AlertTriangle, Camera } from 'lucide-react';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import { getApiBase } from '@/lib/apiBase';
+
+const READER_ELEMENT_ID = 'admin-qr-reader';
 
 type ScanStatus = 'idle' | 'loading' | 'verified' | 'already_verified' | 'invalid' | 'not_paid' | 'error';
 
@@ -47,6 +49,26 @@ const AdminScanPage = () => {
   const [ticket, setTicket] = useState<VerifyTicket | null>(null);
   const busyRef = useRef(false);
   const verifyTokenRef = useRef<(raw: string) => Promise<void>>(async () => {});
+  const html5Ref = useRef<Html5Qrcode | null>(null);
+  const scanHandledRef = useRef(false);
+  const [cameraStarting, setCameraStarting] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+
+  const stopScannerInstance = useCallback(async () => {
+    const inst = html5Ref.current;
+    if (!inst) return;
+    html5Ref.current = null;
+    try {
+      await inst.stop();
+    } catch {
+      /* not running */
+    }
+    try {
+      inst.clear();
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   const verifyToken = useCallback(
     async (raw: string) => {
@@ -100,6 +122,45 @@ const AdminScanPage = () => {
 
   verifyTokenRef.current = verifyToken;
 
+  const startScanner = useCallback(async () => {
+    setCameraError(null);
+    setCameraStarting(true);
+    scanHandledRef.current = false;
+    await stopScannerInstance();
+    const config = { fps: 10, qrbox: { width: 260, height: 260 }, aspectRatio: 1.777778 as const };
+    const onSuccess = (decodedText: string) => {
+      if (scanHandledRef.current) return;
+      scanHandledRef.current = true;
+      void (async () => {
+        await stopScannerInstance();
+        await verifyTokenRef.current(decodedText);
+      })();
+    };
+    try {
+      const html5 = new Html5Qrcode(READER_ELEMENT_ID, { verbose: false });
+      html5Ref.current = html5;
+      await html5.start({ facingMode: 'environment' }, config, onSuccess, () => {});
+    } catch {
+      try {
+        await stopScannerInstance();
+        const cameras = await Html5Qrcode.getCameras();
+        if (cameras.length === 0) {
+          setCameraError(t('admin.cameraUnavailable'));
+          return;
+        }
+        const preferred =
+          cameras.find((c) => /back|rear|environment|wide/i.test(c.label)) ?? cameras[0];
+        const html5 = new Html5Qrcode(READER_ELEMENT_ID, { verbose: false });
+        html5Ref.current = html5;
+        await html5.start(preferred.id, config, onSuccess, () => {});
+      } catch {
+        setCameraError(t('admin.cameraUnavailable'));
+      }
+    } finally {
+      setCameraStarting(false);
+    }
+  }, [stopScannerInstance, t]);
+
   useEffect(() => {
     if (localStorage.getItem('adminAuth') === 'true') return;
     const next = encodeURIComponent(`${location.pathname}${location.search}`);
@@ -112,27 +173,15 @@ const AdminScanPage = () => {
   }, [urlTokenParam, verifyToken]);
 
   useEffect(() => {
-    if (localStorage.getItem('adminAuth') !== 'true') return;
-    if (status !== 'idle') return;
-
-    const scanner = new Html5QrcodeScanner(
-      'admin-qr-reader',
-      { fps: 10, qrbox: { width: 280, height: 280 } },
-      false,
-    );
-
-    scanner.render(
-      (decodedText) => {
-        void verifyTokenRef.current(decodedText);
-        scanner.clear().catch(() => {});
-      },
-      () => {},
-    );
-
     return () => {
-      scanner.clear().catch(() => {});
+      void stopScannerInstance();
     };
-  }, [status]);
+  }, [stopScannerInstance]);
+
+  useEffect(() => {
+    if (status === 'idle') return;
+    void stopScannerInstance();
+  }, [status, stopScannerInstance]);
 
   const resetScanner = () => {
     window.location.href = '/admin/scan';
@@ -147,6 +196,16 @@ const AdminScanPage = () => {
     }
   };
 
+  const dashboardLink = (className: string) => (
+    <Link
+      to="/admin"
+      state={{ activeTab: 'digitalTickets' }}
+      className={className}
+    >
+      {t('admin.viewInDashboard')}
+    </Link>
+  );
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
@@ -154,6 +213,7 @@ const AdminScanPage = () => {
         <div className="flex items-center gap-3 mb-6">
           <Link
             to="/admin"
+            state={{ activeTab: 'digitalTickets' }}
             className="p-2 rounded-lg bg-muted text-foreground hover:bg-muted/80 transition-cinematic"
             aria-label="Back"
           >
@@ -167,8 +227,20 @@ const AdminScanPage = () => {
         <p className="text-sm text-muted-foreground mb-4">{t('admin.scanVerifyHint')}</p>
 
         {status === 'idle' && (
-          <div className="rounded-xl overflow-hidden bg-card saffron-border">
-            <div id="admin-qr-reader" className="w-full min-h-[300px]" />
+          <div className="rounded-xl overflow-hidden bg-card saffron-border p-4 space-y-4">
+            <button
+              type="button"
+              onClick={() => void startScanner()}
+              disabled={cameraStarting}
+              className="w-full flex items-center justify-center gap-2 py-3.5 rounded-lg bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-60"
+            >
+              <Camera className="w-5 h-5 shrink-0" />
+              {cameraStarting ? t('common.loading') : t('admin.startCamera')}
+            </button>
+            {cameraError ? (
+              <p className="text-sm text-destructive text-center">{cameraError}</p>
+            ) : null}
+            <div id={READER_ELEMENT_ID} className="w-full min-h-[280px] rounded-lg overflow-hidden bg-muted/40" />
           </div>
         )}
 
@@ -190,13 +262,18 @@ const AdminScanPage = () => {
               {t('admin.scanVerified')}
             </p>
             <TicketDetails ticket={ticket} formatDt={formatDt} />
-            <button
-              type="button"
-              onClick={resetScanner}
-              className="w-full mt-5 py-3 rounded-lg bg-primary text-primary-foreground text-sm font-semibold"
-            >
-              {t('admin.scanAnother')}
-            </button>
+            <div className="mt-5 space-y-3">
+              {dashboardLink(
+                'block w-full text-center py-3 rounded-lg border border-border text-sm font-medium text-foreground hover:bg-muted/80 transition-colors',
+              )}
+              <button
+                type="button"
+                onClick={resetScanner}
+                className="w-full py-3 rounded-lg bg-primary text-primary-foreground text-sm font-semibold"
+              >
+                {t('admin.scanAnother')}
+              </button>
+            </div>
           </motion.div>
         )}
 
@@ -210,14 +287,20 @@ const AdminScanPage = () => {
             <p className={`${isKn ? 'font-kannada' : 'font-display'} text-xl text-center text-foreground mt-3`}>
               {t('admin.scanAlreadyVerified')}
             </p>
+            <p className="text-sm text-center text-muted-foreground mt-2">{t('admin.alreadyVerifiedDetail')}</p>
             <TicketDetails ticket={ticket} formatDt={formatDt} />
-            <button
-              type="button"
-              onClick={resetScanner}
-              className="w-full mt-5 py-3 rounded-lg bg-muted text-foreground text-sm font-semibold"
-            >
-              {t('admin.scanAnother')}
-            </button>
+            <div className="mt-5 space-y-3">
+              {dashboardLink(
+                'block w-full text-center py-3 rounded-lg border border-border text-sm font-medium text-foreground hover:bg-muted/80 transition-colors',
+              )}
+              <button
+                type="button"
+                onClick={resetScanner}
+                className="w-full py-3 rounded-lg bg-muted text-foreground text-sm font-semibold"
+              >
+                {t('admin.scanAnother')}
+              </button>
+            </div>
           </motion.div>
         )}
 
@@ -231,26 +314,36 @@ const AdminScanPage = () => {
             <p className="text-lg text-foreground mt-3">
               {status === 'not_paid' ? t('admin.scanNotPaid') : t('admin.scanInvalid')}
             </p>
-            <button
-              type="button"
-              onClick={resetScanner}
-              className="w-full mt-5 py-3 rounded-lg bg-primary text-primary-foreground text-sm font-semibold"
-            >
-              {t('admin.scanAnother')}
-            </button>
+            <div className="mt-5 space-y-3">
+              {dashboardLink(
+                'block w-full text-center py-3 rounded-lg border border-border text-sm font-medium text-foreground hover:bg-muted/80 transition-colors',
+              )}
+              <button
+                type="button"
+                onClick={resetScanner}
+                className="w-full py-3 rounded-lg bg-primary text-primary-foreground text-sm font-semibold"
+              >
+                {t('admin.scanAnother')}
+              </button>
+            </div>
           </motion.div>
         )}
 
         {status === 'error' && (
           <div className="rounded-xl p-6 bg-destructive/10 text-center text-sm text-destructive">
             {t('admin.scanServerError')}
-            <button
-              type="button"
-              onClick={resetScanner}
-              className="block w-full mt-4 py-3 rounded-lg bg-muted text-foreground font-medium"
-            >
-              {t('admin.scanAnother')}
-            </button>
+            <div className="mt-4 space-y-3">
+              {dashboardLink(
+                'block w-full text-center py-3 rounded-lg border border-border text-foreground font-medium hover:bg-muted/80 transition-colors',
+              )}
+              <button
+                type="button"
+                onClick={resetScanner}
+                className="block w-full py-3 rounded-lg bg-muted text-foreground font-medium"
+              >
+                {t('admin.scanAnother')}
+              </button>
+            </div>
           </div>
         )}
       </div>

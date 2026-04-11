@@ -138,7 +138,13 @@ export const en = {
     upcoming: 'Upcoming',
     verify: 'Scan & verify',
     scanVerify: 'Scan & verify ticket',
-    scanVerifyHint: 'Allow camera access. Point at the guest’s ticket QR, or open a link that ends with ?t=… after logging in.',
+    scanVerifyHint:
+      'On a phone, tap “Start camera” first (iOS/Android need this), then allow access. Point at the ticket QR, or after login open a link that ends with ?t=…',
+    startCamera: 'Start camera',
+    cameraUnavailable:
+      'Could not open the camera. Allow camera permission for this site, use HTTPS, and try again.',
+    viewInDashboard: 'View tickets in dashboard',
+    alreadyVerifiedDetail: 'Already checked at the gate — no duplicate entry was recorded.',
     scanVerified: 'Valid — entry recorded',
     scanAlreadyVerified: 'Already verified at gate',
     scanInvalid: 'Invalid QR — not recognised',

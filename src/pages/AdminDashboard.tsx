@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Film, BarChart3, Users, MapPin, Ticket, Settings,
   TrendingUp, DollarSign, FileText, Plus, Upload,
@@ -114,11 +114,20 @@ const ExportButtons = ({ onExportXls, onExportPdf }: { onExportXls: () => void; 
   );
 };
 
+const VALID_ADMIN_TABS: Tab[] = [
+  'movies', 'bookings', 'digitalTickets', 'verify', 'theaters', 'customers', 'analytics', 'settings',
+];
+
 const AdminDashboard = () => {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
   const isKn = i18n.language === 'kn';
-  const [activeTab, setActiveTab] = useState<Tab>('movies');
+  const [activeTab, setActiveTab] = useState<Tab>(() => {
+    const tab = (location.state as { activeTab?: Tab } | null)?.activeTab;
+    if (tab && VALID_ADMIN_TABS.includes(tab)) return tab;
+    return 'movies';
+  });
   const [showAddMovie, setShowAddMovie] = useState(false);
   const [paidTickets, setPaidTickets] = useState<PaidTicketRow[]>([]);
   const [paidTicketsError, setPaidTicketsError] = useState('');
