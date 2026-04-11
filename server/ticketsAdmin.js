@@ -1,5 +1,16 @@
 import crypto from 'crypto';
+import mongoose from 'mongoose';
 import Ticket from './models/Ticket.js';
+
+/** @returns {boolean} false if response was sent (503) */
+function ensureDbConnected(res) {
+  if (mongoose.connection.readyState !== 1) {
+    console.error('tickets/admin: MongoDB not connected (readyState=%s)', mongoose.connection.readyState);
+    res.status(503).json({ error: 'db_unavailable' });
+    return false;
+  }
+  return true;
+}
 
 function firstQuery(val) {
   if (val == null) return '';
@@ -22,6 +33,8 @@ export function registerTicketAdminRoutes(app) {
     if (!paymentId || !paymentId.startsWith('pay_')) {
       return res.status(400).json({ error: 'bad_request' });
     }
+    if (!ensureDbConnected(res)) return;
+
     try {
       let ticket = await Ticket.findOne({ razorpayPaymentId: paymentId, isUsed: true });
 
@@ -70,6 +83,8 @@ export function registerTicketAdminRoutes(app) {
     if (!qrToken) {
       return res.status(400).json({ error: 'qrToken_required' });
     }
+    if (!ensureDbConnected(res)) return;
+
     try {
       const ticket = await Ticket.findOne({ qrToken });
       if (!ticket || !ticket.isUsed) {
@@ -99,6 +114,8 @@ export function registerTicketAdminRoutes(app) {
     } catch {
       /* plain token */
     }
+
+    if (!ensureDbConnected(res)) return;
 
     try {
       const ticket = await Ticket.findOne({ qrToken });
@@ -134,6 +151,8 @@ export function registerTicketAdminRoutes(app) {
   });
 
   app.get('/admin/paid-tickets', async (_req, res) => {
+    if (!ensureDbConnected(res)) return;
+
     try {
       const rows = await Ticket.find({ isUsed: true })
         .sort({ paidAt: -1, updatedAt: -1 })

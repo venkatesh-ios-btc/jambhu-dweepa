@@ -158,6 +158,18 @@ export const kn = {
     scanInvalid: 'ಅಮಾನ್ಯ QR — ಗುರುತಿಸಲಾಗಲಿಲ್ಲ',
     scanNotPaid: 'ಈ ಟಿಕೆಟ್ ಪಾವತಿಯಾಗಿಲ್ಲ',
     scanServerError: 'ಸರ್ವರ್ ದೋಷ. API ಮತ್ತು MongoDB ಪರಿಶೀಲಿಸಿ.',
+    scanErrorTitle: 'ಈ QR ಅನ್ನು ಪರಿಶೀಲಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ',
+    scanErrorHtmlResponse:
+      'API ಬದಲು ವೆಬ್ ಪುಟ ಬಂದಿದೆ. Vercel/static ಹೋಸ್ಟಿಂಗ್‌ನಲ್ಲಿ /api ನಿಮ್ಮ Node ಸರ್ವರ್ ಅಲ್ಲ — VITE_API_URL ಅನ್ನು ನಿಮ್ಮ ಬ್ಯಾಕೆಂಡ್ URL ಗೆ ಹೊಂದಿಸಿ ಮತ್ತು ಫ್ರಂಟ್ ಎಂಡ್ ಮರುಡೆಪ್ಲಾಯ್ ಮಾಡಿ.',
+    scanErrorBadJson: 'ಸರ್ವರ್ ಪ್ರತಿಸ್ಪಂದನೆ ಮಾನ್ಯ JSON ಅಲ್ಲ. ಟಿಕೆಟ್ API ಚಾಲನೆಯಲ್ಲಿದೆಯೇ ಎಂದು ಪರಿಶೀಲಿಸಿ.',
+    scanDbUnavailable:
+      'MongoDB ಸಂಪರ್ಕವಿಲ್ಲ. API ಸರ್ವರ್‌ನಲ್ಲಿ .env ನಲ್ಲಿ MONGO_URI ಹೊಂದಿಸಿ, Atlas ನಲ್ಲಿ IP ಅನುಮತಿಸಿ, ಸರ್ವರ್ ಮರುಪ್ರಾರಂಭಿಸಿ.',
+    scanQrTokenMissing: 'ಪರಿಶೀಲನೆ ವಿನಂತಿಯಲ್ಲಿ ಟೋಕನ್ ಇಲ್ಲ. ಮತ್ತೆ ಸ್ಕ್ಯಾನ್ ಮಾಡಿ.',
+    scanErrorCode: 'API ಪ್ರತ್ಯುತ್ತರ: {{code}}',
+    scanErrorServerHint: 'ಟಿಕೆಟ್ API ದೋಷ ಹೊರಹಾಕಿದೆ. Node API ಚಾಲಿಸುವ ಸರ್ವರ್‌ನ ಲಾಗ್ ಪರಿಶೀಲಿಸಿ.',
+    scanNetworkError: 'ನೆಟ್‌ವರ್ಕ್ ದೋಷ — ಸರ್ವರ್ ಪ್ರತಿಸ್ಪಂದಿಸಲಿಲ್ಲ. ಸಂಪರ್ಕ, HTTPS, ಮತ್ತು CORS ಪರಿಶೀಲಿಸಿ.',
+    scanErrorApi404:
+      'ಟಿಕೆಟ್ API 404 — {{api}} ನಲ್ಲಿ ಏನೂ ಇಲ್ಲ. Node API ಡೆಪ್ಲಾಯ್ ಮಾಡಿ ಮತ್ತು VITE_API_URL ಹೊಂದಿಸಿ, ಅಥವಾ /api ಅನ್ನು ನಿಮ್ಮ API ಗೆ ಪ್ರಾಕ್ಸಿ ಮಾಡಿ.',
     scanAnother: 'ಮತ್ತೊಂದನ್ನು ಸ್ಕ್ಯಾನ್ ಮಾಡಿ',
     openScanner: 'ಕ್ಯಾಮೆರಾ ಸ್ಕ್ಯಾನರ್ ತೆರೆಯಿರಿ',
     paidAt: 'ಪಾವತಿ ಸಮಯ',

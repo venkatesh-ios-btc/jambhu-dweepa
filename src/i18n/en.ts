@@ -150,6 +150,18 @@ export const en = {
     scanInvalid: 'Invalid QR — not recognised',
     scanNotPaid: 'This ticket was not paid',
     scanServerError: 'Server error. Check API and MongoDB.',
+    scanErrorTitle: 'Could not verify this QR',
+    scanErrorHtmlResponse:
+      'The app received a web page instead of API data. On Vercel/static hosting, /api is not your Node server — set environment variable VITE_API_URL to your backend base URL (https://your-api…) and redeploy the frontend.',
+    scanErrorBadJson: 'The server response was not valid JSON. Check that the ticket API is running and the URL is correct.',
+    scanDbUnavailable:
+      'MongoDB is not connected. On the API server, set MONGO_URI in .env (Atlas connection string), allow your server IP in Atlas, and restart the server.',
+    scanQrTokenMissing: 'The verify request had no token (unexpected). Try scanning again.',
+    scanErrorCode: 'API returned: {{code}}',
+    scanErrorServerHint: 'The ticket API returned an error. Check server logs on the machine running the Node API.',
+    scanNetworkError: 'Network error — no response from the server. Check connection, HTTPS/certificate, and CORS if the API is on another domain.',
+    scanErrorApi404:
+      'Ticket API returned 404 (nothing at {{api}}). Deploy the Node API and set VITE_API_URL to that server’s HTTPS base URL, or add a reverse proxy so /api reaches your API.',
     scanAnother: 'Scan another',
     openScanner: 'Open camera scanner',
     paidAt: 'Paid at',

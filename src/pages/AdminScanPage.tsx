@@ -22,17 +22,46 @@ export type VerifyTicket = {
   pdfDownloadedAt: string | null;
 };
 
+/** Normalize scanner output (mobile cameras often add BOM, newlines, or spaces). */
 function extractQrToken(text: string): string | null {
-  const trimmed = text.trim();
-  if (!trimmed) return null;
-  try {
-    const u = new URL(trimmed);
-    const t = u.searchParams.get('t');
-    if (t) return t.trim();
-  } catch {
-    /* not a URL */
+  const cleaned = text.replace(/^\uFEFF/, '').trim();
+  const firstLine = cleaned.split(/\r?\n/)[0]?.trim() ?? '';
+  if (!firstLine) return null;
+
+  const fromAbsolute = (s: string): string | null => {
+    try {
+      const u = new URL(s);
+      const t = u.searchParams.get('t');
+      return t ? t.trim() : null;
+    } catch {
+      return null;
+    }
+  };
+
+  let token = fromAbsolute(firstLine);
+  if (token) return token;
+
+  if (typeof window !== 'undefined') {
+    try {
+      const u = new URL(firstLine, window.location.origin);
+      const t = u.searchParams.get('t');
+      if (t) return t.trim();
+    } catch {
+      /* ignore */
+    }
   }
-  if (/^[a-f0-9]{40}$/i.test(trimmed)) return trimmed;
+
+  if (firstLine.startsWith('//')) {
+    token = fromAbsolute(`https:${firstLine}`);
+    if (token) return token;
+  }
+
+  if (!/^https?:\/\//i.test(firstLine) && /[.]/.test(firstLine) && /\//.test(firstLine)) {
+    token = fromAbsolute(`https://${firstLine}`);
+    if (token) return token;
+  }
+
+  if (/^[a-f0-9]{40}$/i.test(firstLine)) return firstLine;
   return null;
 }
 
@@ -53,6 +82,7 @@ const AdminScanPage = () => {
   const scanHandledRef = useRef(false);
   const [cameraStarting, setCameraStarting] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [scanErrorDetail, setScanErrorDetail] = useState<string | null>(null);
 
   const stopScannerInstance = useCallback(async () => {
     const inst = html5Ref.current;
@@ -81,22 +111,52 @@ const AdminScanPage = () => {
       if (busyRef.current) return;
       busyRef.current = true;
       setStatus('loading');
+      setScanErrorDetail(null);
       try {
         const res = await fetch(`${apiBase}/admin/verify-scan`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
           body: JSON.stringify({ qrToken: token }),
+          cache: 'no-store',
+          mode: 'cors',
         });
-        const data = (await res.json()) as {
+        const responseText = await res.text();
+        let data: {
           status?: string;
           ticket?: VerifyTicket;
           error?: string;
         };
-        if (!res.ok || data.error) {
-          setStatus('error');
+        try {
+          data = JSON.parse(responseText) as typeof data;
+        } catch {
           setTicket(null);
+          setScanErrorDetail(
+            responseText.trimStart().startsWith('<')
+              ? t('admin.scanErrorHtmlResponse')
+              : t('admin.scanErrorBadJson'),
+          );
+          setStatus('error');
           return;
         }
+
+        if (!res.ok || data.error) {
+          setTicket(null);
+          const code = data.error;
+          if (res.status === 404) {
+            setScanErrorDetail(t('admin.scanErrorApi404', { api: `${apiBase}/admin/verify-scan` }));
+          } else if (res.status === 503 && code === 'db_unavailable') {
+            setScanErrorDetail(t('admin.scanDbUnavailable'));
+          } else if (res.status === 400 && code === 'qrToken_required') {
+            setScanErrorDetail(t('admin.scanQrTokenMissing'));
+          } else if (code && code !== 'server_error') {
+            setScanErrorDetail(t('admin.scanErrorCode', { code }));
+          } else {
+            setScanErrorDetail(t('admin.scanErrorServerHint'));
+          }
+          setStatus('error');
+          return;
+        }
+
         if (data.status === 'verified') {
           setStatus('verified');
           setTicket(data.ticket ?? null);
@@ -111,13 +171,14 @@ const AdminScanPage = () => {
           setTicket(null);
         }
       } catch {
-        setStatus('error');
         setTicket(null);
+        setScanErrorDetail(t('admin.scanNetworkError'));
+        setStatus('error');
       } finally {
         busyRef.current = false;
       }
     },
-    [apiBase],
+    [apiBase, t],
   );
 
   verifyTokenRef.current = verifyToken;
@@ -331,7 +392,10 @@ const AdminScanPage = () => {
 
         {status === 'error' && (
           <div className="rounded-xl p-6 bg-destructive/10 text-center text-sm text-destructive">
-            {t('admin.scanServerError')}
+            <p className="font-medium text-foreground">{t('admin.scanErrorTitle')}</p>
+            <p className="mt-2 text-muted-foreground text-xs leading-relaxed">
+              {scanErrorDetail ?? t('admin.scanServerError')}
+            </p>
             <div className="mt-4 space-y-3">
               {dashboardLink(
                 'block w-full text-center py-3 rounded-lg border border-border text-foreground font-medium hover:bg-muted/80 transition-colors',
