@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { User, Lock, AlertCircle } from 'lucide-react';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
@@ -12,6 +12,7 @@ const ADMIN_PASSWORD = 'admin@123';
 const LoginPage = () => {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const isKn = i18n.language === 'kn';
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -22,7 +23,12 @@ const LoginPage = () => {
     setError('');
     if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
       localStorage.setItem('adminAuth', 'true');
-      navigate('/admin');
+      const next = searchParams.get('next');
+      if (next && next.startsWith('/')) {
+        navigate(next);
+      } else {
+        navigate('/admin');
+      }
     } else {
       setError(t('login.invalidCredentials'));
     }

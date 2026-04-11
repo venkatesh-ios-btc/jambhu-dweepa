@@ -1,13 +1,15 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Film, BarChart3, Users, MapPin, Ticket, Settings,
   TrendingUp, DollarSign, FileText, Plus, Upload,
-  Image, Star, X, LogOut, Eye, Download
+  Image, Star, X, LogOut, Eye, Download, ScanLine, QrCode,
 } from 'lucide-react';
 import Header from '@/components/Header';
+import { getApiBase } from '@/lib/apiBase';
+import { TicketQrThumb } from '@/components/TicketQrThumb';
 
 /* ── Circular Progress ── */
 const CircularProgress = ({ value, max, label, color = 'hsl(var(--primary))' }: { value: number; max: number; label: string; color?: string }) => {
@@ -34,13 +36,6 @@ const demoMovies = [
   { id: '2', title: 'Kailasa', status: 'upcoming', collection: 0, target: 8000000, ticketsSold: 0, theaters: 0 },
 ];
 
-const initialBookings = [
-  { id: 'DVL-001', customer: 'Ramesh K', movie: 'Devaloka', theater: 'PVR Orion', status: 'confirmed' },
-  { id: 'DVL-002', customer: 'Suresh M', movie: 'Devaloka', theater: 'INOX Mantri', status: 'confirmed' },
-  { id: 'DVL-003', customer: 'Priya R', movie: 'Devaloka', theater: 'Cinepolis Royal', status: 'pending' },
-  { id: 'DVL-004', customer: 'Anita S', movie: 'Devaloka', theater: 'PVR Forum', status: 'cancelled' },
-];
-
 const demoTheaters = [
   { name: 'PVR Orion', location: 'Rajajinagar', screens: 4, capacity: 1200 },
   { name: 'INOX Mantri', location: 'Malleshwaram', screens: 3, capacity: 900 },
@@ -50,14 +45,35 @@ const demoTheaters = [
 const sidebarItems = [
   { key: 'movies', icon: Film },
   { key: 'bookings', icon: Ticket },
+  { key: 'digitalTickets', icon: QrCode },
+  { key: 'verify', icon: ScanLine },
   { key: 'theaters', icon: MapPin },
   { key: 'customers', icon: Users },
   { key: 'analytics', icon: BarChart3 },
   { key: 'settings', icon: Settings },
 ];
 
-type Tab = 'movies' | 'bookings' | 'theaters' | 'customers' | 'analytics' | 'settings';
-type BookingStatus = 'confirmed' | 'cancelled' | 'notValid' | 'pending';
+type Tab =
+  | 'movies'
+  | 'bookings'
+  | 'digitalTickets'
+  | 'verify'
+  | 'theaters'
+  | 'customers'
+  | 'analytics'
+  | 'settings';
+
+type PaidTicketRow = {
+  code: string;
+  customerMobile: string;
+  customerArea: string;
+  razorpayPaymentId: string;
+  paidAt: string | null;
+  entryVerifiedAt: string | null;
+  pdfDownloadedAt: string | null;
+  qrTokenSuffix: string;
+  qrToken: string | null;
+};
 
 /* ── Export Helpers ── */
 const exportTableAsXls = (title: string, headers: string[], rows: string[][]) => {
@@ -104,7 +120,9 @@ const AdminDashboard = () => {
   const isKn = i18n.language === 'kn';
   const [activeTab, setActiveTab] = useState<Tab>('movies');
   const [showAddMovie, setShowAddMovie] = useState(false);
-  const [bookings, setBookings] = useState(initialBookings);
+  const [paidTickets, setPaidTickets] = useState<PaidTicketRow[]>([]);
+  const [paidTicketsError, setPaidTicketsError] = useState('');
+  const [bookingsLoading, setBookingsLoading] = useState(false);
 
   const [movieForm, setMovieForm] = useState({
     title: '', tagline: '', about: '', genre: '', duration: '', releaseDate: '',
@@ -115,9 +133,25 @@ const AdminDashboard = () => {
 
   const handleLogout = () => { localStorage.removeItem('adminAuth'); navigate('/login'); };
 
-  const updateBookingStatus = (id: string, status: BookingStatus) => {
-    setBookings(prev => prev.map(b => b.id === id ? { ...b, status } : b));
-  };
+  const appOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+
+  useEffect(() => {
+    if (activeTab !== 'bookings' && activeTab !== 'digitalTickets') return;
+    setPaidTicketsError('');
+    setBookingsLoading(true);
+    const api = getApiBase();
+    fetch(`${api}/admin/paid-tickets`)
+      .then(async (r) => {
+        const data = (await r.json()) as { tickets?: PaidTicketRow[]; error?: string };
+        if (!r.ok) throw new Error(data.error || 'fetch_failed');
+        setPaidTickets(data.tickets || []);
+      })
+      .catch(() => {
+        setPaidTickets([]);
+        setPaidTicketsError(t('admin.bookingsLoadError'));
+      })
+      .finally(() => setBookingsLoading(false));
+  }, [activeTab, t]);
 
   const addCastMember = () => setMovieForm(p => ({ ...p, cast: [...p.cast, { name: '', role: '', photo: '' }] }));
   const removeCastMember = (i: number) => setMovieForm(p => ({ ...p, cast: p.cast.filter((_, idx) => idx !== i) }));
@@ -131,8 +165,26 @@ const AdminDashboard = () => {
 
   const movieHeaders = ['Movie', 'Status', 'Tickets Sold', 'Collection (₹)', 'Target (₹)', 'Progress'];
   const movieRows = demoMovies.map(m => [m.title, m.status, m.ticketsSold.toLocaleString(), m.collection.toLocaleString(), m.target.toLocaleString(), `${m.target ? ((m.collection / m.target) * 100).toFixed(1) : 0}%`]);
-  const bookingHeaders = ['ID', 'Customer', 'Movie', 'Theater', 'Status'];
-  const bookingRows = bookings.map(b => [b.id, b.customer, b.movie, b.theater, b.status]);
+  const bookingHeaders = [
+    t('admin.ticketCodeCol'),
+    t('booking.mobile'),
+    t('booking.area'),
+    t('admin.paymentIdCol'),
+    t('admin.paidAt'),
+    t('admin.verifiedAt'),
+    t('admin.pdfSaved'),
+  ];
+  const fmt = (iso: string | null) =>
+    iso ? new Date(iso).toLocaleString(isKn ? 'en-IN' : undefined) : '—';
+  const bookingRows = paidTickets.map((b) => [
+    `JD-${b.code}`,
+    b.customerMobile,
+    b.customerArea,
+    b.razorpayPaymentId,
+    fmt(b.paidAt),
+    b.entryVerifiedAt ? fmt(b.entryVerifiedAt) : t('admin.gatePending'),
+    b.pdfDownloadedAt ? fmt(b.pdfDownloadedAt) : t('admin.pdfNotSaved'),
+  ]);
   const theaterHeaders = ['Theater', 'Location', 'Screens', 'Capacity'];
   const theaterRows = demoTheaters.map(th => [th.name, th.location, String(th.screens), String(th.capacity)]);
   const analyticsHeaders = ['Metric', 'Value', 'Trend'];
@@ -279,54 +331,71 @@ const AdminDashboard = () => {
             <div>
               <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
                 <h1 className={`${isKn ? 'font-kannada' : 'font-display'} text-2xl text-foreground`}>{t('admin.bookings')}</h1>
-                <ExportButtons onExportXls={() => exportTableAsXls('Bookings', bookingHeaders, bookingRows)} onExportPdf={() => exportTableAsPdf('Bookings', bookingHeaders, bookingRows)} />
+                <div className="flex gap-2 flex-wrap items-center">
+                  <Link
+                    to="/admin/scan"
+                    className="flex items-center gap-2 bg-primary text-primary-foreground text-sm px-4 py-2 rounded-lg hover:bg-primary/90 transition-cinematic"
+                  >
+                    <ScanLine className="w-4 h-4" /> {t('admin.openScanner')}
+                  </Link>
+                  <ExportButtons
+                    onExportXls={() => exportTableAsXls('Bookings', bookingHeaders, bookingRows)}
+                    onExportPdf={() => exportTableAsPdf('Bookings', bookingHeaders, bookingRows)}
+                  />
+                </div>
               </div>
+              {paidTicketsError ? (
+                <p className="text-sm text-destructive mb-4">{paidTicketsError}</p>
+              ) : null}
               <div className="bg-card rounded-xl saffron-border overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-border">
-                        <th className="text-left p-4 text-muted-foreground font-medium">ID</th>
-                        <th className="text-left p-4 text-muted-foreground font-medium">{t('admin.customers')}</th>
-                        <th className="text-left p-4 text-muted-foreground font-medium">{t('admin.movies')}</th>
-                        <th className="text-left p-4 text-muted-foreground font-medium">{t('admin.theaters')}</th>
+                        <th className="text-left p-4 text-muted-foreground font-medium">{t('admin.ticketCodeCol')}</th>
+                        <th className="text-left p-4 text-muted-foreground font-medium">{t('booking.mobile')}</th>
+                        <th className="text-left p-4 text-muted-foreground font-medium">{t('booking.area')}</th>
+                        <th className="text-left p-4 text-muted-foreground font-medium">{t('admin.paymentIdCol')}</th>
+                        <th className="text-left p-4 text-muted-foreground font-medium">{t('admin.paidAt')}</th>
                         <th className="text-left p-4 text-muted-foreground font-medium">{t('admin.status')}</th>
-                        <th className="text-left p-4 text-muted-foreground font-medium">Actions</th>
+                        <th className="text-left p-4 text-muted-foreground font-medium">{t('admin.pdfSaved')}</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {bookings.map(b => (
-                        <tr key={b.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
-                          <td className="p-4 text-primary font-mono text-xs">{b.id}</td>
-                          <td className="p-4 text-foreground">{b.customer}</td>
-                          <td className="p-4 text-foreground">{b.movie}</td>
-                          <td className="p-4 text-muted-foreground">{b.theater}</td>
+                      {bookingsLoading ? (
+                        <tr>
+                          <td colSpan={7} className="p-8 text-center text-muted-foreground text-sm">
+                            {t('common.loading')}
+                          </td>
+                        </tr>
+                      ) : null}
+                      {!bookingsLoading && paidTickets.length === 0 && !paidTicketsError ? (
+                        <tr>
+                          <td colSpan={7} className="p-8 text-center text-muted-foreground text-sm">
+                            {t('admin.noPaidBookings')}
+                          </td>
+                        </tr>
+                      ) : null}
+                      {paidTickets.map((b) => (
+                        <tr key={b.code} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
+                          <td className="p-4 text-primary font-mono text-xs">JD-{b.code}</td>
+                          <td className="p-4 text-foreground">{b.customerMobile}</td>
+                          <td className="p-4 text-muted-foreground">{b.customerArea}</td>
+                          <td className="p-4 text-xs font-mono text-muted-foreground break-all max-w-[140px]">
+                            {b.razorpayPaymentId}
+                          </td>
+                          <td className="p-4 text-muted-foreground tabular-nums whitespace-nowrap">{fmt(b.paidAt)}</td>
                           <td className="p-4">
-                            <span className={`text-xs px-2 py-0.5 rounded-full ${statusColors[b.status] || statusColors.pending}`}>
-                              {t(`admin.${b.status}`)}
+                            <span
+                              className={`text-xs px-2 py-0.5 rounded-full ${
+                                b.entryVerifiedAt ? statusColors.confirmed : statusColors.pending
+                              }`}
+                            >
+                              {b.entryVerifiedAt ? t('admin.gateVerified') : t('admin.gatePending')}
                             </span>
                           </td>
-                          <td className="p-4">
-                            <div className="flex gap-1.5 flex-wrap">
-                              {b.status !== 'confirmed' && (
-                                <button onClick={() => updateBookingStatus(b.id, 'confirmed')}
-                                  className="text-[11px] px-2 py-1 rounded bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 transition-colors">
-                                  {t('admin.confirmed')}
-                                </button>
-                              )}
-                              {b.status !== 'cancelled' && (
-                                <button onClick={() => updateBookingStatus(b.id, 'cancelled')}
-                                  className="text-[11px] px-2 py-1 rounded bg-destructive/20 text-destructive hover:bg-destructive/30 transition-colors">
-                                  {t('admin.cancelled')}
-                                </button>
-                              )}
-                              {b.status !== 'notValid' && (
-                                <button onClick={() => updateBookingStatus(b.id, 'notValid')}
-                                  className="text-[11px] px-2 py-1 rounded bg-muted text-muted-foreground hover:bg-muted/80 transition-colors">
-                                  {t('admin.notValid')}
-                                </button>
-                              )}
-                            </div>
+                          <td className="p-4 text-muted-foreground text-xs tabular-nums whitespace-nowrap">
+                            {b.pdfDownloadedAt ? fmt(b.pdfDownloadedAt) : t('admin.pdfNotSaved')}
                           </td>
                         </tr>
                       ))}
@@ -334,6 +403,105 @@ const AdminDashboard = () => {
                   </table>
                 </div>
               </div>
+            </div>
+          )}
+
+          {activeTab === 'digitalTickets' && (
+            <div>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                <div>
+                  <h1 className={`${isKn ? 'font-kannada' : 'font-display'} text-2xl text-foreground`}>
+                    {t('admin.digitalTickets')}
+                  </h1>
+                  <p className="text-sm text-muted-foreground mt-1">{t('admin.digitalTicketsHint')}</p>
+                </div>
+                <Link
+                  to="/admin/scan"
+                  className="inline-flex items-center justify-center gap-2 bg-primary text-primary-foreground text-sm px-4 py-2 rounded-lg hover:bg-primary/90 transition-cinematic shrink-0"
+                >
+                  <ScanLine className="w-4 h-4" /> {t('admin.openScanner')}
+                </Link>
+              </div>
+              {paidTicketsError ? (
+                <p className="text-sm text-destructive mb-4">{paidTicketsError}</p>
+              ) : null}
+              {bookingsLoading ? (
+                <p className="text-sm text-muted-foreground">{t('common.loading')}</p>
+              ) : (
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                  {paidTickets.map((b) => {
+                    const verifyUrl =
+                      b.qrToken && appOrigin
+                        ? `${appOrigin}/admin/scan?t=${encodeURIComponent(b.qrToken)}`
+                        : '';
+                    return (
+                      <div
+                        key={b.code}
+                        className="bg-card rounded-xl saffron-border p-4 flex flex-col sm:flex-row gap-4"
+                      >
+                        <div className="shrink-0 flex justify-center sm:block">
+                          {verifyUrl ? (
+                            <TicketQrThumb verifyUrl={verifyUrl} size={112} />
+                          ) : (
+                            <div className="w-28 h-28 rounded bg-muted flex items-center justify-center text-xs text-muted-foreground text-center px-2">
+                              {t('admin.noQrYet')}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0 space-y-1.5 text-sm">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <span className="font-mono text-primary text-xs">JD-{b.code}</span>
+                            <span
+                              className={`text-xs px-2 py-0.5 rounded-full ${
+                                b.entryVerifiedAt ? statusColors.confirmed : statusColors.pending
+                              }`}
+                            >
+                              {b.entryVerifiedAt ? t('admin.gateVerified') : t('admin.gatePending')}
+                            </span>
+                          </div>
+                          <p>
+                            <span className="text-muted-foreground">{t('booking.mobile')}: </span>
+                            <span className="text-foreground">{b.customerMobile}</span>
+                          </p>
+                          <p>
+                            <span className="text-muted-foreground">{t('booking.area')}: </span>
+                            <span className="text-foreground">{b.customerArea}</span>
+                          </p>
+                          <p className="text-xs text-muted-foreground break-all">
+                            {t('admin.paymentIdCol')}: {b.razorpayPaymentId}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {t('admin.paidAt')}: {fmt(b.paidAt)}
+                          </p>
+                          {b.entryVerifiedAt ? (
+                            <p className="text-xs text-emerald-500/90">
+                              {t('admin.verifiedAt')}: {fmt(b.entryVerifiedAt)}
+                            </p>
+                          ) : null}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {!bookingsLoading && paidTickets.length === 0 && !paidTicketsError ? (
+                <p className="text-sm text-muted-foreground">{t('admin.noPaidBookings')}</p>
+              ) : null}
+            </div>
+          )}
+
+          {activeTab === 'verify' && (
+            <div className="max-w-lg">
+              <h1 className={`${isKn ? 'font-kannada' : 'font-display'} text-2xl text-foreground mb-2`}>
+                {t('admin.scanVerify')}
+              </h1>
+              <p className="text-sm text-muted-foreground mb-6">{t('admin.scanVerifyHint')}</p>
+              <Link
+                to="/admin/scan"
+                className="inline-flex items-center gap-2 bg-gradient-to-r from-primary to-accent text-primary-foreground font-semibold text-sm px-6 py-3 rounded-lg shadow-saffron-glow"
+              >
+                <ScanLine className="w-5 h-5" /> {t('admin.openScanner')}
+              </Link>
             </div>
           )}
 

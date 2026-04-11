@@ -10,6 +10,7 @@ import PaymentSuccess from "./pages/PaymentSuccess.tsx";
 import QRVerification from "./pages/QRVerification.tsx";
 import LoginPage from "./pages/LoginPage.tsx";
 import AdminDashboard from "./pages/AdminDashboard.tsx";
+import AdminScanPage from "./pages/AdminScanPage.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -27,6 +28,7 @@ const App = () => (
           <Route path="/qr-verify" element={<QRVerification />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/admin" element={<AdminDashboard />} />
+          <Route path="/admin/scan" element={<AdminScanPage />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
