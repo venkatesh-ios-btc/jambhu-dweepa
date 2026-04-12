@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import Ticket from './models/Ticket.js';
+import { normalizeTicketCode } from './ticketCode.js';
 import { loadRazorpayCredentials } from './razorpayEnv.js';
 import { razorpayCreateOrder, razorpayPingAuth } from './razorpayApi.js';
 
@@ -48,8 +49,7 @@ export function registerPaymentRoutes(app) {
       return res.status(503).json({ error: 'payments_unconfigured' });
     }
 
-    const ticketCode =
-      typeof req.body?.ticketCode === 'string' ? req.body.ticketCode.trim() : '';
+    const ticketCode = normalizeTicketCode(req.body?.ticketCode);
     if (!ticketCode) {
       return res.status(400).json({ error: 'ticket_required' });
     }
@@ -107,7 +107,7 @@ export function registerPaymentRoutes(app) {
       customerArea: rawArea,
     } = req.body || {};
 
-    const ticketCode = typeof rawCode === 'string' ? rawCode.trim() : '';
+    const ticketCode = normalizeTicketCode(rawCode);
     const customerMobile = typeof rawMobile === 'string' ? rawMobile.trim().slice(0, 32) : '';
     const customerArea = typeof rawArea === 'string' ? rawArea.trim().slice(0, 120) : '';
     if (!orderId || !paymentId || !signature || !ticketCode) {

@@ -5,7 +5,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Film, BarChart3, Users, MapPin, Ticket, Settings,
   TrendingUp, DollarSign, FileText, Plus, Upload,
-  Image, Star, X, LogOut, Eye, Download, ScanLine, QrCode,
+  Image, Star, X, LogOut, Eye, Download, ScanLine, QrCode, ClipboardList,
 } from 'lucide-react';
 import Header from '@/components/Header';
 import { getApiBase } from '@/lib/apiBase';
@@ -46,6 +46,7 @@ const sidebarItems = [
   { key: 'movies', icon: Film },
   { key: 'bookings', icon: Ticket },
   { key: 'digitalTickets', icon: QrCode },
+  { key: 'ticketDetails', icon: ClipboardList },
   { key: 'verify', icon: ScanLine },
   { key: 'theaters', icon: MapPin },
   { key: 'customers', icon: Users },
@@ -57,6 +58,7 @@ type Tab =
   | 'movies'
   | 'bookings'
   | 'digitalTickets'
+  | 'ticketDetails'
   | 'verify'
   | 'theaters'
   | 'customers'
@@ -115,8 +117,34 @@ const ExportButtons = ({ onExportXls, onExportPdf }: { onExportXls: () => void; 
 };
 
 const VALID_ADMIN_TABS: Tab[] = [
-  'movies', 'bookings', 'digitalTickets', 'verify', 'theaters', 'customers', 'analytics', 'settings',
+  'movies', 'bookings', 'digitalTickets', 'ticketDetails', 'verify', 'theaters', 'customers', 'analytics', 'settings',
 ];
+
+type TicketDetailRow = {
+  id: string;
+  type: 'individual' | 'bulk';
+  ticketNumber?: string;
+  startTicketNumber?: string;
+  endTicketNumber?: string;
+  ticketCount?: number | null;
+  holderName: string;
+  entryDate: string;
+  createdAt?: string;
+};
+
+function stripJdPrefix(s: string) {
+  return s.replace(/^\s*JD-?/i, '').trim();
+}
+
+function parseNumericTicketRange(start: string, end: string): { count: number } | null {
+  const a = stripJdPrefix(start);
+  const b = stripJdPrefix(end);
+  const n1 = Number.parseInt(a, 10);
+  const n2 = Number.parseInt(b, 10);
+  if (!Number.isFinite(n1) || !Number.isFinite(n2) || String(n1) !== a || String(n2) !== b) return null;
+  if (n2 < n1) return null;
+  return { count: n2 - n1 + 1 };
+}
 
 const AdminDashboard = () => {
   const { t, i18n } = useTranslation();
@@ -132,6 +160,17 @@ const AdminDashboard = () => {
   const [paidTickets, setPaidTickets] = useState<PaidTicketRow[]>([]);
   const [paidTicketsError, setPaidTicketsError] = useState('');
   const [bookingsLoading, setBookingsLoading] = useState(false);
+
+  const [ticketDetailRows, setTicketDetailRows] = useState<TicketDetailRow[]>([]);
+  const [ticketDetailsLoading, setTicketDetailsLoading] = useState(false);
+  const [ticketDetailsError, setTicketDetailsError] = useState('');
+  const [individualTicketForm, setIndividualTicketForm] = useState({ ticketNumber: '', holderName: '', entryDate: '' });
+  const [bulkTicketForm, setBulkTicketForm] = useState({
+    start: '', end: '', count: '', holderName: '', entryDate: '',
+  });
+  const [individualSaving, setIndividualSaving] = useState(false);
+  const [bulkSaving, setBulkSaving] = useState(false);
+  const [ticketDetailsMessage, setTicketDetailsMessage] = useState('');
 
   const [movieForm, setMovieForm] = useState({
     title: '', tagline: '', about: '', genre: '', duration: '', releaseDate: '',
@@ -161,6 +200,149 @@ const AdminDashboard = () => {
       })
       .finally(() => setBookingsLoading(false));
   }, [activeTab, t]);
+
+  useEffect(() => {
+    if (activeTab !== 'ticketDetails') return;
+    setTicketDetailsError('');
+    setTicketDetailsLoading(true);
+    const api = getApiBase();
+    fetch(`${api}/admin/ticket-details`)
+      .then(async (r) => {
+        const data = (await r.json()) as { entries?: TicketDetailRow[]; error?: string };
+        if (!r.ok) throw new Error(data.error || 'fetch_failed');
+        setTicketDetailRows(data.entries || []);
+      })
+      .catch(() => {
+        setTicketDetailRows([]);
+        setTicketDetailsError(t('admin.ticketDetailsLoadError'));
+      })
+      .finally(() => setTicketDetailsLoading(false));
+  }, [activeTab, t]);
+
+  const refreshTicketDetails = () => {
+    const api = getApiBase();
+    fetch(`${api}/admin/ticket-details`)
+      .then(async (r) => {
+        const data = (await r.json()) as { entries?: TicketDetailRow[]; error?: string };
+        if (!r.ok) throw new Error(data.error || 'fetch_failed');
+        setTicketDetailRows(data.entries || []);
+      })
+      .catch(() => {
+        setTicketDetailsError(t('admin.ticketDetailsLoadError'));
+      });
+  };
+
+  const saveIndividualTicketDetails = (e: React.FormEvent) => {
+    e.preventDefault();
+    setTicketDetailsMessage('');
+    const ticketNumber = stripJdPrefix(individualTicketForm.ticketNumber);
+    if (!ticketNumber || !individualTicketForm.holderName.trim() || !individualTicketForm.entryDate) {
+      setTicketDetailsMessage(t('admin.ticketDetailsSaveError'));
+      return;
+    }
+    setIndividualSaving(true);
+    const api = getApiBase();
+    fetch(`${api}/admin/ticket-details`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'individual',
+        ticketNumber,
+        holderName: individualTicketForm.holderName.trim(),
+        entryDate: individualTicketForm.entryDate,
+      }),
+    })
+      .then(async (r) => {
+        const data = (await r.json()) as { ok?: boolean; error?: string };
+        if (!r.ok) {
+          if (data.error === 'duplicate_code') {
+            setTicketDetailsMessage(t('admin.ticketDetailsDuplicateCode'));
+            return;
+          }
+          throw new Error(data.error || 'save_failed');
+        }
+        setIndividualTicketForm({ ticketNumber: '', holderName: '', entryDate: '' });
+        setTicketDetailsMessage(t('admin.ticketDetailsSaved'));
+        refreshTicketDetails();
+      })
+      .catch(() => setTicketDetailsMessage(t('admin.ticketDetailsSaveError')))
+      .finally(() => setIndividualSaving(false));
+  };
+
+  const saveBulkTicketDetails = (e: React.FormEvent) => {
+    e.preventDefault();
+    setTicketDetailsMessage('');
+    const range = parseNumericTicketRange(bulkTicketForm.start, bulkTicketForm.end);
+    let ticketCount: number | undefined;
+    if (range) {
+      ticketCount = range.count;
+    } else {
+      const c = Number.parseInt(String(bulkTicketForm.count).trim(), 10);
+      if (!Number.isFinite(c) || c < 1) {
+        setTicketDetailsMessage(t('admin.ticketDetailsSaveError'));
+        return;
+      }
+      ticketCount = c;
+    }
+    if (!bulkTicketForm.holderName.trim() || !bulkTicketForm.entryDate) {
+      setTicketDetailsMessage(t('admin.ticketDetailsSaveError'));
+      return;
+    }
+    if (range && bulkTicketForm.count.trim()) {
+      const manual = Number.parseInt(bulkTicketForm.count.trim(), 10);
+      if (Number.isFinite(manual) && manual !== range.count) {
+        setTicketDetailsMessage(t('admin.ticketDetailsCountMismatch'));
+        return;
+      }
+    }
+    setBulkSaving(true);
+    const api = getApiBase();
+    fetch(`${api}/admin/ticket-details`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'bulk',
+        startTicketNumber: stripJdPrefix(bulkTicketForm.start),
+        endTicketNumber: stripJdPrefix(bulkTicketForm.end),
+        ticketCount,
+        holderName: bulkTicketForm.holderName.trim(),
+        entryDate: bulkTicketForm.entryDate,
+      }),
+    })
+      .then(async (r) => {
+        const data = (await r.json()) as { ok?: boolean; error?: string; expected?: number };
+        if (!r.ok) {
+          if (data.error === 'invalid_range') throw new Error('invalid_range');
+          if (data.error === 'count_mismatch') throw new Error('count_mismatch');
+          if (data.error === 'duplicate_code') {
+            setTicketDetailsMessage(t('admin.ticketDetailsDuplicateCode'));
+            return;
+          }
+          if (data.error === 'duplicate_codes') {
+            setTicketDetailsMessage(t('admin.ticketDetailsDuplicateCodes'));
+            return;
+          }
+          throw new Error(data.error || 'save_failed');
+        }
+        setBulkTicketForm({ start: '', end: '', count: '', holderName: '', entryDate: '' });
+        setTicketDetailsMessage(t('admin.ticketDetailsSaved'));
+        refreshTicketDetails();
+      })
+      .catch((err) => {
+        if (err?.message === 'invalid_range') setTicketDetailsMessage(t('admin.ticketDetailsInvalidRange'));
+        else if (err?.message === 'count_mismatch') setTicketDetailsMessage(t('admin.ticketDetailsCountMismatch'));
+        else setTicketDetailsMessage(t('admin.ticketDetailsSaveError'));
+      })
+      .finally(() => setBulkSaving(false));
+  };
+
+  const bulkRangePreview = parseNumericTicketRange(bulkTicketForm.start, bulkTicketForm.end);
+
+  useEffect(() => {
+    if (activeTab !== 'ticketDetails') return;
+    const r = parseNumericTicketRange(bulkTicketForm.start, bulkTicketForm.end);
+    if (r) setBulkTicketForm((p) => ({ ...p, count: String(r.count) }));
+  }, [activeTab, bulkTicketForm.start, bulkTicketForm.end]);
 
   const addCastMember = () => setMovieForm(p => ({ ...p, cast: [...p.cast, { name: '', role: '', photo: '' }] }));
   const removeCastMember = (i: number) => setMovieForm(p => ({ ...p, cast: p.cast.filter((_, idx) => idx !== i) }));
@@ -496,6 +678,238 @@ const AdminDashboard = () => {
               {!bookingsLoading && paidTickets.length === 0 && !paidTicketsError ? (
                 <p className="text-sm text-muted-foreground">{t('admin.noPaidBookings')}</p>
               ) : null}
+            </div>
+          )}
+
+          {activeTab === 'ticketDetails' && (
+            <div className="space-y-8">
+              <div>
+                <h1 className={`${isKn ? 'font-kannada' : 'font-display'} text-2xl text-foreground`}>
+                  {t('admin.ticketDetails')}
+                </h1>
+                <p className="text-sm text-muted-foreground mt-1">{t('admin.ticketDetailsHint')}</p>
+              </div>
+
+              {ticketDetailsMessage ? (
+                <p
+                  className={`text-sm ${
+                    ticketDetailsMessage === t('admin.ticketDetailsSaved')
+                      ? 'text-emerald-500'
+                      : 'text-destructive'
+                  }`}
+                >
+                  {ticketDetailsMessage}
+                </p>
+              ) : null}
+
+              <div className="grid gap-6 lg:grid-cols-2">
+                <form
+                  onSubmit={saveIndividualTicketDetails}
+                  className="bg-card rounded-xl saffron-border p-6 space-y-4"
+                >
+                  <h2 className="text-sm font-semibold text-primary flex items-center gap-2">
+                    <Ticket className="w-4 h-4" /> {t('admin.individualTicket')}
+                  </h2>
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1.5">{t('admin.ticketNumber')}</label>
+                    <input
+                      className={inputClass}
+                      placeholder="e.g. JD-12345 or 12345"
+                      value={individualTicketForm.ticketNumber}
+                      onChange={(e) =>
+                        setIndividualTicketForm((p) => ({ ...p, ticketNumber: e.target.value }))
+                      }
+                      autoComplete="off"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1.5">{t('admin.holderName')}</label>
+                    <input
+                      className={inputClass}
+                      value={individualTicketForm.holderName}
+                      onChange={(e) =>
+                        setIndividualTicketForm((p) => ({ ...p, holderName: e.target.value }))
+                      }
+                      autoComplete="name"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1.5">{t('admin.entryDate')}</label>
+                    <input
+                      type="date"
+                      className={inputClass}
+                      value={individualTicketForm.entryDate}
+                      onChange={(e) =>
+                        setIndividualTicketForm((p) => ({ ...p, entryDate: e.target.value }))
+                      }
+                    />
+                  </div>
+                  <motion.button
+                    type="submit"
+                    disabled={individualSaving}
+                    whileTap={{ scale: 0.98 }}
+                    className="w-full py-2.5 rounded-lg font-semibold text-sm bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-60 transition-cinematic"
+                  >
+                    {individualSaving ? t('common.loading') : t('admin.saveEntry')}
+                  </motion.button>
+                </form>
+
+                <form onSubmit={saveBulkTicketDetails} className="bg-card rounded-xl saffron-border p-6 space-y-4">
+                  <h2 className="text-sm font-semibold text-primary flex items-center gap-2">
+                    <ClipboardList className="w-4 h-4" /> {t('admin.bulkTickets')}
+                  </h2>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs text-muted-foreground mb-1.5">
+                        {t('admin.startTicketNumber')}
+                      </label>
+                      <input
+                        className={inputClass}
+                        value={bulkTicketForm.start}
+                        onChange={(e) => setBulkTicketForm((p) => ({ ...p, start: e.target.value }))}
+                        autoComplete="off"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-muted-foreground mb-1.5">
+                        {t('admin.endTicketNumber')}
+                      </label>
+                      <input
+                        className={inputClass}
+                        value={bulkTicketForm.end}
+                        onChange={(e) => setBulkTicketForm((p) => ({ ...p, end: e.target.value }))}
+                        autoComplete="off"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1.5">{t('admin.ticketCount')}</label>
+                    <input
+                      className={inputClass}
+                      inputMode="numeric"
+                      value={bulkTicketForm.count}
+                      onChange={(e) => setBulkTicketForm((p) => ({ ...p, count: e.target.value }))}
+                      placeholder={bulkRangePreview ? String(bulkRangePreview.count) : ''}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {bulkRangePreview ? t('admin.ticketCountAuto') : t('admin.ticketDetailsBulkCountHint')}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1.5">{t('admin.holderName')}</label>
+                    <input
+                      className={inputClass}
+                      value={bulkTicketForm.holderName}
+                      onChange={(e) => setBulkTicketForm((p) => ({ ...p, holderName: e.target.value }))}
+                      autoComplete="name"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1.5">{t('admin.entryDate')}</label>
+                    <input
+                      type="date"
+                      className={inputClass}
+                      value={bulkTicketForm.entryDate}
+                      onChange={(e) => setBulkTicketForm((p) => ({ ...p, entryDate: e.target.value }))}
+                    />
+                  </div>
+                  <motion.button
+                    type="submit"
+                    disabled={bulkSaving}
+                    whileTap={{ scale: 0.98 }}
+                    className="w-full py-2.5 rounded-lg font-semibold text-sm bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-60 transition-cinematic"
+                  >
+                    {bulkSaving ? t('common.loading') : t('admin.saveEntry')}
+                  </motion.button>
+                </form>
+              </div>
+
+              <div>
+                <h2 className={`${isKn ? 'font-kannada' : 'font-display'} text-lg text-foreground mb-4`}>
+                  {t('admin.recentTicketDetails')}
+                </h2>
+                {ticketDetailsError ? (
+                  <p className="text-sm text-destructive mb-4">{ticketDetailsError}</p>
+                ) : null}
+                <div className="bg-card rounded-xl saffron-border overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-border">
+                          <th className="text-left p-4 text-muted-foreground font-medium">
+                            {t('admin.ticketDetailsColType')}
+                          </th>
+                          <th className="text-left p-4 text-muted-foreground font-medium">
+                            {t('admin.ticketDetailsColDetail')}
+                          </th>
+                          <th className="text-left p-4 text-muted-foreground font-medium">
+                            {t('admin.ticketCount')}
+                          </th>
+                          <th className="text-left p-4 text-muted-foreground font-medium">
+                            {t('admin.holderName')}
+                          </th>
+                          <th className="text-left p-4 text-muted-foreground font-medium">
+                            {t('admin.entryDate')}
+                          </th>
+                          <th className="text-left p-4 text-muted-foreground font-medium">
+                            {t('admin.ticketDetailsSavedAt')}
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {ticketDetailsLoading ? (
+                          <tr>
+                            <td colSpan={6} className="p-8 text-center text-muted-foreground">
+                              {t('common.loading')}
+                            </td>
+                          </tr>
+                        ) : null}
+                        {!ticketDetailsLoading && ticketDetailRows.length === 0 && !ticketDetailsError ? (
+                          <tr>
+                            <td colSpan={6} className="p-8 text-center text-muted-foreground">
+                              {t('admin.noTicketDetailsYet')}
+                            </td>
+                          </tr>
+                        ) : null}
+                        {ticketDetailRows.map((row) => {
+                          const detail =
+                            row.type === 'individual'
+                              ? `JD-${row.ticketNumber || ''}`
+                              : `JD-${row.startTicketNumber || ''} → JD-${row.endTicketNumber || ''}`;
+                          const countCell =
+                            row.type === 'bulk' && row.ticketCount != null ? String(row.ticketCount) : '—';
+                          const savedAt = row.createdAt
+                            ? new Date(row.createdAt).toLocaleString(isKn ? 'en-IN' : undefined)
+                            : '—';
+                          return (
+                            <tr
+                              key={row.id}
+                              className="border-b border-border/50 hover:bg-muted/30 transition-colors"
+                            >
+                              <td className="p-4 text-foreground">
+                                {row.type === 'individual'
+                                  ? t('admin.ticketDetailsKindIndividual')
+                                  : t('admin.ticketDetailsKindBulk')}
+                              </td>
+                              <td className="p-4 font-mono text-xs text-primary break-all max-w-[200px]">
+                                {detail}
+                              </td>
+                              <td className="p-4 text-foreground tabular-nums">{countCell}</td>
+                              <td className="p-4 text-foreground">{row.holderName}</td>
+                              <td className="p-4 text-muted-foreground tabular-nums whitespace-nowrap">
+                                {row.entryDate}
+                              </td>
+                              <td className="p-4 text-muted-foreground text-xs tabular-nums whitespace-nowrap">
+                                {savedAt}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
