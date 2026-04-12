@@ -1,8 +1,8 @@
 /**
  * API base URL.
  * - Dev default `/api` → Vite proxy to 127.0.0.1:5050 (strips `/api` prefix).
- * - Prod on Vercel: same `/api` is handled by `api/[...path].js` Edge proxy → set BACKEND_URL in Vercel
- *   to your Node API origin (HTTPS, no trailing slash), then redeploy — no VITE_API_URL required.
+ * - Prod on Vercel: same `/api` is handled by `api/[...path].js` (Node) → set BACKEND_URL in Vercel
+ *   to your Node API origin (HTTPS, no trailing slash), then redeploy. Test /api/health after deploy.
  * - Optional: VITE_API_URL=https://your-api.com at build time to call the API directly (skip proxy).
  */
 export function getApiBase(): string {
